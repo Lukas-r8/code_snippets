@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import CoreGraphics
 
 //func convertStrToNumber(_ string: String) -> NSNumber? {
 //    let formatter = NumberFormatter()
@@ -113,7 +114,6 @@ func sendFeniciaPhoto(){
 }
 
 
-sendFeniciaPhoto()
 
 
 func getImage(call: (UIImageView) -> Void){
@@ -142,21 +142,72 @@ func getImage(call: (UIImageView) -> Void){
  
 }
 
-getImage { (image) in
-    print(image.image)
+
+let image = UIImage(named: "lucas.jpg")!
+
+func getImageBitmap(_ img: UIImage) -> UnsafePointer<Int8>?{
+    print(3333)
+    guard let data = img.jpegData(compressionQuality: 1) else {return nil}
+    
+    let nsdata = NSData(data: data)
+    
+    let pointer = UnsafeMutablePointer<Int8>.allocate(capacity: nsdata.length)
+    
+    nsdata.getBytes(pointer, range: NSRange(location: 0, length: nsdata.length))
+
+    let buffer = UnsafePointer(pointer)
+    return buffer
 }
 
 
 
 
+func getImageFrom(_ arr: UnsafePointer<Int8>, _ width: Int, _ height: Int){
+    guard let dataProvider = CGDataProvider(filename: arr) else {return}
+    
+    
+    guard let space = CGColorSpace(name: CGColorSpace.sRGB) else {return}
+    
+    let info = CGBitmapInfo.Element()
+    
+    let intent = CGColorRenderingIntent.defaultIntent
+    
+    guard let cgimg = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: 4 * width, space: space, bitmapInfo: info, provider: dataProvider, decode: nil, shouldInterpolate: false, intent: intent) else {return}
+    
+    
+    let myimg = UIImage(cgImage: cgimg)
+    myimg
+    
+    
+}
+
+getImageFrom(getImageBitmap(image)!, Int(image.size.width), Int(image.size.height))
 
 
 
 
 
+extension String {
+    
+}
 
 
+func getDayAndMonthFrom(_ str: String) -> (day: String, month: String)?{
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "pt-BR")
+    formatter.dateFormat = "dd/MM/yyyy HH:mm"
+    guard let date = formatter.date(from: str) else {return nil}
+    
 
+    formatter.dateFormat = "dd,MMM"
+    let strDate = formatter.string(from: date)
+    
+    let res = strDate.split(separator: ",")
+    let day = String(res[0])
+    let month = String(res[1])
+
+    return (day: day, month: month)
+}
 
 
 
