@@ -1,7 +1,5 @@
 import UIKit
 
-
-
 class HeartCell: UIImageView {
     var index = 0
     private var velocityX: CGFloat = {
