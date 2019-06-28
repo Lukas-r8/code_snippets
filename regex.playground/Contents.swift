@@ -15,6 +15,7 @@ extension String {
             .matches(in: self, options: [], range: NSRange(location: 0, length: self.count))
             .map { (checkResult) -> String in
                 let range = Range(checkResult.range, in: self)!
+                
                 return String(self[range])
         }
         return result ?? [String]()
@@ -46,3 +47,5 @@ extension String {
     }
     
 }
+
+
