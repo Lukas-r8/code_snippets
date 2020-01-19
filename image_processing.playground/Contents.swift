@@ -1,64 +1,56 @@
 import UIKit
 
-var photo = UIImage(named: "lukas.jpg")!
+struct ImageData {
+    var pixels: [Pixel]
+    var metadata: ImageMetadata
+}
 
-
-
-func getArrayFrom(_ img: UIImage, hasAlphaComponent: Bool = true) throws -> [UInt8]{
-    guard let cgimg = img.cgImage else {throw NSError(domain: "Failed to convert image", code: 1, userInfo: nil)}
-
-    let bytesPerPixels: Int = hasAlphaComponent ? 4 : 3
+struct ImageMetadata {
+    var height: Int
+    var width: Int
+    var colorSpace: CGColorSpace?
     
-    let width: Int = cgimg.width
-    let height: Int = cgimg.height
-    
-    let bitsPerComponent: Int = 8
-    let bytesPerRow = bytesPerPixels * width
-    let totalPixels = (bytesPerPixels * width) * height
-    
-    let alignment = MemoryLayout<UInt8>.alignment
-    
-    let data = UnsafeMutableRawPointer.allocate(byteCount: totalPixels, alignment: alignment )
-    
-    let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue).rawValue
-    
-    let colorSpace = CGColorSpaceCreateDeviceRGB()
-    
-    let ctx = CGContext(data: data, width: width, height: height, bitsPerComponent: bitsPerComponent, bytesPerRow: bytesPerRow, space: colorSpace, bitmapInfo: bitmapInfo)
-    ctx?.draw(cgimg, in: CGRect(origin: .zero, size: photo.size))
-    
-    
-    let bindedPointer: UnsafeMutablePointer<UInt8> = data.bindMemory(to: UInt8.self, capacity: totalPixels)
-    
-    let pixels = UnsafeMutableBufferPointer.init(start: bindedPointer, count: totalPixels)
-    
-    
-    return pixels.map {$0}
+    var size: CGSize { CGSize(width: width, height: height) }
 }
 
 
-
-func arrayToImage(_ array: [UInt8], width: Int, height: Int) throws -> UIImage {
-    
-    var d = array
-    
-    let cgImg = d.withUnsafeMutableBytes { (ptr) -> CGImage in
-        let ctx = CGContext(
-            data: ptr.baseAddress,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: 4*width,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
-            )!
-        return ctx.makeImage()!
-    }
-    return UIImage(cgImage: cgImg)
+struct Pixel {
+    var r: UInt8
+    var g: UInt8
+    var b: UInt8
+    var a: UInt8
+    var data: [UInt8] { return [b,g,r,a]}
 }
 
-
-
-
-
-
+func convertImageIntoPixels(image: UIImage) -> ImageData? {
+     guard
+         let cgImage = image.cgImage,
+         let data = cgImage.dataProvider?.data
+     else { return nil }
+     
+     let pointer: UnsafePointer<UInt8> = CFDataGetBytePtr(data)
+     let rowLenght = cgImage.width * 4
+     let pixels = stride(from: 0, to: rowLenght * cgImage.height, by: 4).map { iterator -> Pixel in
+         return Pixel(r: pointer[iterator], g: pointer[iterator + 1], b: pointer[iterator + 2], a: pointer[iterator + 3])
+     }
+     let metadata = ImageMetadata(height: cgImage.height, width: cgImage.width, colorSpace: cgImage.colorSpace)
+     return ImageData(pixels: pixels, metadata: metadata)
+ }
+ 
+ func getImageFromPixels(_ imgData: ImageData) -> UIImage? {
+     var data = imgData.pixels.flatMap { $0.data }
+     let width = imgData.metadata.width
+     let height = imgData.metadata.height
+     let image = data.withUnsafeMutableBytes { pointer -> CGImage? in
+         let ctx = CGContext(data: pointer.baseAddress,
+                             width: width,
+                             height: height,
+                             bitsPerComponent: 8,
+                             bytesPerRow: width * 4,
+                             space: CGColorSpaceCreateDeviceRGB(),
+                             bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue)
+         return ctx?.makeImage()
+     }
+     guard let cgimage = image else { return nil }
+     return UIImage(cgImage: cgimage)
+ }
