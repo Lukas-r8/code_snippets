@@ -43,15 +43,34 @@ final class Matrix {
     }
     
     func randomize() {
-        
+        // TODO: add random values to this matrix with range
+    }
+    
+    func matrixPrint() {
+        print("Matrix \(matrix_rows)x\(matrix_columns)\n")
+        data.forEach { print($0) }
+        print("\n ====================================\n")
     }
     
     func multiply(m2: Matrix) throws -> Matrix {
+        let m1 = self
         try validateMultiplication(m1: self, m2: m2)
+        let resultMatrix = Matrix(row: m1.matrix_rows, column: m2.matrix_columns)
+        var resultData: [[Float]] = []
         
+        for stepRow in 0 ..< m1.matrix_rows {
+            var row: [Float] = []
+            for stepColumn in 0 ..< m2.matrix_columns {
+                let m2_column_data = m2.data.map { $0[stepColumn] }
+                let mult_sum = zip(m1.data[stepRow], m2_column_data).map { $0.0 * $0.1 }.reduce(0, +)
+                row.append(mult_sum)
+            }
+            resultData.append(row)
+        }
         
+        try resultMatrix.populate(data: resultData)
         
-        return Matrix(row: 0, column: 0)
+        return resultMatrix
     }
     
     private func validate(data: [[Float]]) throws {
@@ -71,4 +90,26 @@ final class Matrix {
         guard m1.populated && m2.populated else { throw "Matrices must be both populated!" }
         guard m1.matrix_columns == m2.matrix_rows else { throw "\(m1.matrix_rows)x\(m1.matrix_columns) matrix \(m2.matrix_rows)x\(m2.matrix_columns) matrix, columns of the first must match rows of the second matrix" }
     }
- }
+}
+
+
+let m1Data: [[Float]] = [
+    [1, 2, 3],
+    [7, 3, 2]
+]
+let m1 = Matrix(row: 2, column: 3)
+try! m1.populate(data: m1Data)
+
+let m2Data: [[Float]] = [
+    [2, 4, 1, 1],
+    [2, 1, 1, 1],
+    [8, 0, 1, 1]
+]
+let m2 = Matrix(row: 3, column: 4)
+try! m2.populate(data: m2Data)
+
+m1.matrixPrint()
+m2.matrixPrint()
+
+let resultMatrix = try! m1.multiply(m2: m2)
+resultMatrix.matrixPrint()
