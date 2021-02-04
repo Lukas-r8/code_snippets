@@ -5,26 +5,6 @@ var str = "Hello, playground"
 
 extension String: Error { }
 
-final class NeuralNetwork {
-    struct LayerLayout {
-        let input: Int
-        let hidden: Int
-        let output: Int
-    }
-    
-    private let layout: LayerLayout
-    
-    
-    init(layout: LayerLayout) {
-        self.layout = layout
-    }
-    
-    func feedFoward(inputs: [Float]) throws {
-        guard layout.input == inputs.count else { throw "Input doesnt match layout input layer, Should be \(layout.input)" }
-        
-    }
-}
-
 final class Matrix {
     let matrix_rows: Int
     let matrix_columns: Int
@@ -36,20 +16,31 @@ final class Matrix {
         self.matrix_columns = column
     }
     
+    init(data: [[Float]]) throws {
+        self.matrix_rows = data.count
+        self.matrix_columns = data.first?.count ?? 0
+        try populate(data: data)
+    }
+    
     func populate(data: [[Float]]) throws {
         try validate(data: data)
         self.data = data
         populated = true
     }
     
-    func randomize() {
-        // TODO: add random values to this matrix with range
+    func randomize(range: ClosedRange<Float> = 0...1) throws {
+        let randomized = (0..<matrix_rows).map { _ in (0..<matrix_columns).map { _ in Float.random(in: range) } }
+        try populate(data: randomized)
+    }
+    
+    func applyToData(f: (Float) -> Float) {
+        data = data.map { row in row.map(f) }
     }
     
     func matrixPrint() {
         print("Matrix \(matrix_rows)x\(matrix_columns)\n")
         data.forEach { print($0) }
-        print("\n ====================================\n")
+        print("\n====================================\n")
     }
     
     func multiply(m2: Matrix) throws -> Matrix {
@@ -92,24 +83,59 @@ final class Matrix {
     }
 }
 
+final class NeuralNetwork {
+    struct LayerLayout {
+        let input: Int
+        let hidden: Int
+        let output: Int
+    }
+    
+    private let layout: LayerLayout
+    
+    private let ih_weights: Matrix
+    private let ho_weights: Matrix
+    
+    private let inputLayer: Matrix
+    private var hiddenLayer: Matrix!
+    private var outputLayer: Matrix!
+    
+    init(layout: LayerLayout) throws {
+        self.layout = layout
+        
+        ih_weights =  Matrix(row: layout.input, column: layout.hidden)
+        try ih_weights.randomize()
+        
+        ho_weights = Matrix(row: layout.hidden, column: layout.output)
+        try ho_weights.randomize()
+        
+        inputLayer = Matrix(row: 1, column: layout.input)
+    }
+    
+    func sigmoid(_ value: Float) -> Float {
+        return 1 / (1 + powf(Float(M_E), -value))
+    }
+    
+    func feedFoward(inputs: [Float]) throws -> Matrix {
+        guard layout.input == inputs.count else { throw "Input doesnt match layout input layer, Should be \(layout.input)" }
+        try inputLayer.populate(data: [inputs])
+        
+        hiddenLayer = try inputLayer.multiply(m2: ih_weights)
+        hiddenLayer.applyToData(f: sigmoid)
+        
+        outputLayer = try hiddenLayer.multiply(m2: ho_weights)
+        outputLayer.applyToData(f: sigmoid)
+        
+        return outputLayer
+    }
+    
+    func printNetwork() {
+        inputLayer.matrixPrint()
+        hiddenLayer.matrixPrint()
+        outputLayer.matrixPrint()
+    }
+}
 
-let m1Data: [[Float]] = [
-    [1, 2, 3],
-    [7, 3, 2]
-]
-let m1 = Matrix(row: 2, column: 3)
-try! m1.populate(data: m1Data)
+let neuralNetwork = try! NeuralNetwork(layout: NeuralNetwork.LayerLayout(input: 2, hidden: 3, output: 1))
 
-let m2Data: [[Float]] = [
-    [2, 4, 1, 1],
-    [2, 1, 1, 1],
-    [8, 0, 1, 1]
-]
-let m2 = Matrix(row: 3, column: 4)
-try! m2.populate(data: m2Data)
-
-m1.matrixPrint()
-m2.matrixPrint()
-
-let resultMatrix = try! m1.multiply(m2: m2)
-resultMatrix.matrixPrint()
+let output = try! neuralNetwork.feedFoward(inputs: [-10,-10])
+neuralNetwork.printNetwork()
