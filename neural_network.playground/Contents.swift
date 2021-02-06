@@ -86,6 +86,10 @@ extension Matrix {
         try Matrix.validateAddOrSubtraction(m1: m1, m2: m2)
         return try Matrix(data: zip(m1.data, m2.data).map { rows in zip(rows.0, rows.1).map(-) })
     }
+    
+    static func sameDimension(_ m1: Matrix,_ m2: Matrix) -> Bool {
+        return (m1.matrix_rows == m2.matrix_rows) && (m1.matrix_columns == m2.matrix_columns)
+    }
 }
 
 private extension Matrix {
@@ -138,6 +142,7 @@ extension Matrix {
     }
 }
 
+// Neural network
 final class NeuralNetwork {
     struct LayerLayout {
         let input: Int
@@ -145,11 +150,13 @@ final class NeuralNetwork {
         let output: Int
     }
     
+    struct TrainingData {
+        let input: [Float]
+        let expectedOutput: Matrix
+    }
+    
     private let layout: LayerLayout
-    
-   
-    
-    
+
     private let inputLayer: Matrix
     private let ih_weights: Matrix
     
@@ -171,11 +178,10 @@ final class NeuralNetwork {
     }
     
     func sigmoid(_ value: Float) -> Float {
-        
         return 1 / (1 + exp(-value))
     }
     
-    func feedFoward(inputs: [Float]) throws -> Matrix {
+    func predict(inputs: [Float]) throws -> Matrix {
         guard layout.input == inputs.count else { throw "Input doesnt match layout input layer, Should be \(layout.input)" }
         try inputLayer.populate(data: [inputs])
         
@@ -188,14 +194,22 @@ final class NeuralNetwork {
         return outputLayer
     }
     
-    func backPropagation() {
-        
+    func train(_ trainingData: [TrainingData]) throws {
+        for data in trainingData {
+            try validateTrainingData(data)
+            let output = try predict(inputs: data.input)
+            let cost = calculateCost(output: output, expectedOutput: data.expectedOutput)
+            print(cost)
+            
+        }
     }
     
-    func calculateError() {
-        
+    func calculateCost(output: Matrix, expectedOutput: Matrix) -> Float {
+        let difference = try! Matrix.subtract(output, expectedOutput)
+        difference.applyToData { powf($0, 2) }
+        return difference.data.reduce(0) { total, row in total + row.reduce(0, +) }
     }
-    
+
     func printNetwork() {
         inputLayer.matrixPrint()
         ih_weights.matrixPrint()
@@ -203,9 +217,16 @@ final class NeuralNetwork {
         ho_weights.matrixPrint()
         outputLayer.matrixPrint()
     }
+    
+    private func validateTrainingData(_ data: TrainingData) throws {
+        guard Matrix.sameDimension(outputLayer, data.expectedOutput) else {
+            throw "Invalid training data expected output dimensions \(outputLayer.matrix_rows)x\(outputLayer.matrix_columns), but got \(data.expectedOutput.matrix_rows)x\(data.expectedOutput.matrix_columns)"
+        }
+        guard data.input.count == layout.input else { throw "Invalid Input, neural network expects input size to be \(layout.input), but got \(data.input.count)" }
+    }
 }
 
 let neuralNetwork = try NeuralNetwork(layout: NeuralNetwork.LayerLayout(input: 2, hidden: 3, output: 2))
 
-let output = try neuralNetwork.feedFoward(inputs: [3,4])
+let output = try neuralNetwork.predict(inputs: [3,4])
 neuralNetwork.printNetwork()
