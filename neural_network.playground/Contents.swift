@@ -28,7 +28,7 @@ final class Matrix {
         populated = true
     }
     
-    func randomize(range: ClosedRange<Float> = 0...1) throws {
+    func randomize(range: ClosedRange<Float> = 2...2) throws {
         let randomized = (0..<matrix_rows).map { _ in (0..<matrix_columns).map { _ in Float.random(in: range) } }
         try populate(data: randomized)
     }
@@ -64,6 +64,31 @@ final class Matrix {
         return resultMatrix
     }
     
+    func add(m2: Matrix) throws {
+        try Matrix.validateAddOrSubtraction(m1: self, m2: m2)
+        data = zip(data, m2.data).map { rows in zip(rows.0, rows.1).map(+) }
+    }
+    
+    func subtract(m2: Matrix) throws {
+        try Matrix.validateAddOrSubtraction(m1: self, m2: m2)
+        data = zip(data, m2.data).map { rows in zip(rows.0, rows.1).map(-) }
+    }
+}
+
+//Static methods
+extension Matrix {
+    static func add(_ m1: Matrix,_ m2: Matrix) throws -> Matrix {
+        try Matrix.validateAddOrSubtraction(m1: m1, m2: m2)
+        return try Matrix(data: zip(m1.data, m2.data).map { rows in zip(rows.0, rows.1).map(+) })
+    }
+    
+    static func subtract(_ m1: Matrix,_ m2: Matrix) throws -> Matrix {
+        try Matrix.validateAddOrSubtraction(m1: m1, m2: m2)
+        return try Matrix(data: zip(m1.data, m2.data).map { rows in zip(rows.0, rows.1).map(-) })
+    }
+}
+
+private extension Matrix {
     private func validate(data: [[Float]]) throws {
         guard data.count == matrix_rows else { throw "This matrix should contain \(matrix_rows) rows, but got \(data.count)" }
         var columns_count: Int?
@@ -81,6 +106,36 @@ final class Matrix {
         guard m1.populated && m2.populated else { throw "Matrices must be both populated!" }
         guard m1.matrix_columns == m2.matrix_rows else { throw "\(m1.matrix_rows)x\(m1.matrix_columns) matrix \(m2.matrix_rows)x\(m2.matrix_columns) matrix, columns of the first must match rows of the second matrix" }
     }
+    
+    private static func validateAddOrSubtraction(m1: Matrix, m2: Matrix) throws {
+        guard (m1.matrix_rows == m2.matrix_rows) && (m1.matrix_columns == m2.matrix_columns) else { throw "Matrix dimensions doens't match" }
+    }
+}
+
+// Subscripts
+extension Matrix {
+    subscript(row: Int, column: Int) -> Float {
+        get {
+            guard 1...matrix_columns ~= column else { fatalError("Columns out of bound") }
+            guard 1...matrix_rows ~= row else { fatalError("Rows out of bound") }
+            return data[row - 1][column - 1]
+        }
+        set {
+            guard 1...matrix_columns ~= column else { fatalError("Columns out of bound") }
+            guard 1...matrix_rows ~= row else { fatalError("Rows out of bound") }
+            data[row - 1][column - 1] = newValue
+        }
+    }
+    
+    subscript(row index: Int) -> [Float] {
+        guard 1...matrix_rows ~= index else { fatalError("Rows out of bound") }
+        return data[index - 1]
+    }
+    
+    subscript(column index: Int) -> [Float] {
+        guard 1...matrix_columns ~= index else { fatalError("Columns out of bound") }
+        return data.map { $0[index - 1] }
+    }
 }
 
 final class NeuralNetwork {
@@ -92,11 +147,15 @@ final class NeuralNetwork {
     
     private let layout: LayerLayout
     
-    private let ih_weights: Matrix
-    private let ho_weights: Matrix
+   
+    
     
     private let inputLayer: Matrix
+    private let ih_weights: Matrix
+    
     private var hiddenLayer: Matrix!
+    private let ho_weights: Matrix
+    
     private var outputLayer: Matrix!
     
     init(layout: LayerLayout) throws {
@@ -112,7 +171,8 @@ final class NeuralNetwork {
     }
     
     func sigmoid(_ value: Float) -> Float {
-        return 1 / (1 + powf(Float(M_E), -value))
+        
+        return 1 / (1 + exp(-value))
     }
     
     func feedFoward(inputs: [Float]) throws -> Matrix {
@@ -128,14 +188,24 @@ final class NeuralNetwork {
         return outputLayer
     }
     
+    func backPropagation() {
+        
+    }
+    
+    func calculateError() {
+        
+    }
+    
     func printNetwork() {
         inputLayer.matrixPrint()
+        ih_weights.matrixPrint()
         hiddenLayer.matrixPrint()
+        ho_weights.matrixPrint()
         outputLayer.matrixPrint()
     }
 }
 
-let neuralNetwork = try! NeuralNetwork(layout: NeuralNetwork.LayerLayout(input: 2, hidden: 3, output: 1))
+let neuralNetwork = try NeuralNetwork(layout: NeuralNetwork.LayerLayout(input: 2, hidden: 3, output: 2))
 
-let output = try! neuralNetwork.feedFoward(inputs: [-10,-10])
+let output = try neuralNetwork.feedFoward(inputs: [3,4])
 neuralNetwork.printNetwork()
