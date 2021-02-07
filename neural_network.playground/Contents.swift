@@ -6,14 +6,17 @@ var str = "Hello, playground"
 extension String: Error { }
 
 final class Matrix {
-    private let matrix_rows: Int
-    private let matrix_columns: Int
+    let matrix_rows: Int
+    let matrix_columns: Int
     var data: [[Float]] = []
     private var populated: Bool = false
     
     init(row: Int, column: Int) {
         self.matrix_rows = row
         self.matrix_columns = column
+        let rowValues = Array<Float>(repeating: 0, count: column)
+        self.data = Array<[Float]>(repeating: rowValues, count: row)
+        populated = true
     }
     
     init(data: [[Float]]) throws {
@@ -80,7 +83,6 @@ final class Matrix {
     
     func transposed() throws -> Matrix {
         let matrix = Matrix(row: matrix_columns, column: matrix_rows)
-        try matrix.randomize()
         for index in 1...matrix.matrix_columns {
             matrix[column: index] = self[row: index]
         }
@@ -248,58 +250,57 @@ final class NeuralNetwork {
         for data in trainingData {
             try validateTrainingData(data)
             let output = try predict(inputs: data.input)
-
-            let costs = calculateIndividualCosts(output: output, expectedOutput: data.expectedOutput)
-            let totalCost = calculateTotalCost(output: output, expectedOutput: data.expectedOutput)
             
-            let derived = calculateDerivedIndividualCosts(output: output, expectedOutput: data.expectedOutput)
-            let deltas = weightDeltas(output: output ,derivedCost: derived)
+            let outputError = calculateOutputCosts(output: output, expectedOutput: data.expectedOutput)
+            print("Costs output:")
+            outputError.matrixPrint()
             
-            print("those are the deltas: ")
-            deltas.matrixPrint()
+            let ho_delta_weights = deltaWeights(for: ho_weights, error: outputError, layer: output, test: true)
+            try ho_weights.add(m2: ho_delta_weights)
+        
+            // Hidden
+            let hiddenErrors = backpropagateError(for: ho_weights, currentErrors: outputError)
+            print("Costs Hidden layer:")
+            hiddenErrors.matrixPrint()
             
+            let ih_delta_weights = deltaWeights(for: ih_weights, error: hiddenErrors, layer: hiddenLayer, test: false)
+            try ih_weights.add(m2: ih_delta_weights)
         }
     }
     
-    func weightDeltas(output: Matrix, derivedCost: Matrix) -> Matrix {
-        // derivative of total cost with respect to each weigth
-        // a = derived cost
-        // b = derivative of sigmoid function
-        // c = output after sigmoid previous perceptro (hidden or input)
-        // DELTA ERROR -> WEIGHT = a * b * c
-        
-        //A
-        let c = derivedCost.copy()
-        
-        // B
-        let b = outputLayer.copy()
-        b.applyToData(f: primeSigmoid)
-        
-        let a = hiddenLayer.copy()
-        
-        
-        print("starting")
-        let _one = try! a.multiply(m2: b)
-        print("_one")
-        let _two = try! _one.multiply(m2: c)
-        print("_two")
-        return _two
+    func deltaWeights(for weights: Matrix, error: Matrix, layer: Matrix, test: Bool) -> Matrix {
+        if test {
+            let m = Matrix(row: 3, column: 2)
+            try! m.randomize(range: 10...10)
+            return m
+        } else {
+            let m = Matrix(row: 2, column: 3)
+            try! m.randomize(range: 100...100)
+            return m
+        }
     }
     
-    func calculateIndividualCosts(output: Matrix, expectedOutput: Matrix) -> Matrix {
+    /// Returns the error for the previous layer based on previous weights
+    func backpropagateError(for weights: Matrix, currentErrors: Matrix) -> Matrix {
+        let proportion = Matrix(row: weights.matrix_rows, column: weights.matrix_columns)
+        
+        for index in 1...weights.matrix_columns {
+            let column = weights[column: index]
+            let sum = column.reduce(0, +)
+            proportion[column: index] = column.map { $0 / sum }
+        }
+        
+        return try! proportion.multiply(m2: currentErrors.transposed()).transposed()
+    }
+    
+    func calculateOutputCosts(output: Matrix, expectedOutput: Matrix) -> Matrix {
         let errors = try! Matrix.subtract(expectedOutput, output)
         errors.applyToData { powf($0, 2) }
         return errors
     }
     
-    func calculateDerivedIndividualCosts(output: Matrix, expectedOutput: Matrix) -> Matrix {
-        let errors = try! Matrix.subtract(expectedOutput, output)
-        errors.applyToData { $0 * 2 }
-        return errors
-    }
-    
     func calculateTotalCost(output: Matrix, expectedOutput: Matrix) -> Float {
-        let costs = calculateIndividualCosts(output: output, expectedOutput: expectedOutput)
+        let costs = calculateOutputCosts(output: output, expectedOutput: expectedOutput)
         return costs.data.reduce(0) { total, row in total + row.reduce(0, +) }
     }
 
@@ -317,13 +318,11 @@ final class NeuralNetwork {
     }
 }
 
-//let neuralNetwork = try NeuralNetwork(layout: NeuralNetwork.LayerLayout(input: 2, hidden: 3, output: 2))
-//
-//
-//
-//
-////let output = try neuralNetwork.predict(inputs: [4,5])
-//let expected = try Matrix(data: [[0, 1]] )
-//
-//try neuralNetwork.train([.init(input: [4, 5], expectedOutput: expected)])
-//neuralNetwork.printNetwork()
+let neuralNetwork = try NeuralNetwork(layout: NeuralNetwork.LayerLayout(input: 2, hidden: 3, output: 2))
+
+let expected = try Matrix(data: [[0, 1]] )
+let expected2 = try Matrix(data: [[1, 0]] )
+try neuralNetwork.train([.init(input: [4, 5], expectedOutput: expected), .init(input: [7, 3], expectedOutput: expected2)])
+
+print("\n\nNeural network state:")
+neuralNetwork.printNetwork()
