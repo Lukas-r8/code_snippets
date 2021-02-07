@@ -225,14 +225,6 @@ final class NeuralNetwork {
         outputLayer = Matrix(row: 1, column: layout.output)
     }
     
-    func sigmoid(_ value: Float) -> Float {
-        return 1 / (1 + exp(-value))
-    }
-    
-    func primeSigmoid(sigmoidValue: Float) -> Float {
-        return sigmoidValue * (1 - sigmoidValue)
-    }
-    
     func predict(inputs: [Float]) throws -> Matrix {
         guard layout.input == inputs.count else { throw "Input doesnt match layout input layer, Should be \(layout.input)" }
         try inputLayer.populate(data: [inputs])
@@ -268,16 +260,26 @@ final class NeuralNetwork {
         }
     }
     
+    func printNetwork() {
+        inputLayer.matrixPrint()
+        ih_weights.matrixPrint()
+        hiddenLayer.matrixPrint()
+        ho_weights.matrixPrint()
+        outputLayer.matrixPrint()
+    }
+    
+    
+}
+
+private extension NeuralNetwork {
+    func validateTrainingData(_ data: TrainingData) throws {
+        try Matrix.sameDimension(outputLayer, data.expectedOutput)
+        guard data.input.count == layout.input else { throw "Invalid Input, neural network expects input size to be \(layout.input), but got \(data.input.count)" }
+    }
+    
     func deltaWeights(for weights: Matrix, error: Matrix, layer: Matrix, test: Bool) -> Matrix {
-        if test {
-            let m = Matrix(row: 3, column: 2)
-            try! m.randomize(range: 10...10)
-            return m
-        } else {
-            let m = Matrix(row: 2, column: 3)
-            try! m.randomize(range: 100...100)
-            return m
-        }
+        // Implementation to find deltas here
+        fatalError()
     }
     
     /// Returns the error for the previous layer based on previous weights
@@ -303,20 +305,16 @@ final class NeuralNetwork {
         let costs = calculateOutputCosts(output: output, expectedOutput: expectedOutput)
         return costs.data.reduce(0) { total, row in total + row.reduce(0, +) }
     }
-
-    func printNetwork() {
-        inputLayer.matrixPrint()
-        ih_weights.matrixPrint()
-        hiddenLayer.matrixPrint()
-        ho_weights.matrixPrint()
-        outputLayer.matrixPrint()
+    
+    func sigmoid(_ value: Float) -> Float {
+        return 1 / (1 + exp(-value))
     }
     
-    private func validateTrainingData(_ data: TrainingData) throws {
-        try Matrix.sameDimension(outputLayer, data.expectedOutput)
-        guard data.input.count == layout.input else { throw "Invalid Input, neural network expects input size to be \(layout.input), but got \(data.input.count)" }
+    func primeSigmoid(sigmoidValue: Float) -> Float {
+        return sigmoidValue * (1 - sigmoidValue)
     }
 }
+
 
 let neuralNetwork = try NeuralNetwork(layout: NeuralNetwork.LayerLayout(input: 2, hidden: 3, output: 2))
 
