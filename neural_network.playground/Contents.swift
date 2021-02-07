@@ -6,8 +6,8 @@ var str = "Hello, playground"
 extension String: Error { }
 
 final class Matrix {
-    let matrix_rows: Int
-    let matrix_columns: Int
+    private let matrix_rows: Int
+    private let matrix_columns: Int
     var data: [[Float]] = []
     private var populated: Bool = false
     
@@ -73,6 +73,19 @@ final class Matrix {
         try Matrix.validateAddOrSubtraction(m1: self, m2: m2)
         data = zip(data, m2.data).map { rows in zip(rows.0, rows.1).map(-) }
     }
+    
+    func copy() -> Matrix {
+        return try! Matrix(data: data)
+    }
+    
+    func transposed() throws -> Matrix {
+        let matrix = Matrix(row: matrix_columns, column: matrix_rows)
+        try matrix.randomize()
+        for index in 1...matrix.matrix_columns {
+            matrix[column: index] = self[row: index]
+        }
+        return matrix
+    }
 }
 
 //Static methods
@@ -87,8 +100,16 @@ extension Matrix {
         return try Matrix(data: zip(m1.data, m2.data).map { rows in zip(rows.0, rows.1).map(-) })
     }
     
-    static func sameDimension(_ m1: Matrix,_ m2: Matrix) -> Bool {
-        return (m1.matrix_rows == m2.matrix_rows) && (m1.matrix_columns == m2.matrix_columns)
+    static func sameDimension(_ m1: Matrix,_ m2: Matrix) throws {
+        guard (m1.matrix_rows == m2.matrix_rows) && (m1.matrix_columns == m2.matrix_columns) else {
+            throw "Invalid training data expected output dimensions"
+        }
+    }
+    
+    static func multiply(_ scalar: Float, _ matrix: Matrix) -> Matrix {
+        let copy = matrix.copy()
+        copy.applyToData { $0 * scalar }
+        return copy
     }
 }
 
@@ -130,15 +151,23 @@ extension Matrix {
             data[row - 1][column - 1] = newValue
         }
     }
-    
+
     subscript(row index: Int) -> [Float] {
         guard 1...matrix_rows ~= index else { fatalError("Rows out of bound") }
         return data[index - 1]
     }
-    
+
     subscript(column index: Int) -> [Float] {
-        guard 1...matrix_columns ~= index else { fatalError("Columns out of bound") }
-        return data.map { $0[index - 1] }
+        get {
+            guard 1...matrix_columns ~= index else { fatalError("Columns out of bound") }
+            return data.map { $0[index - 1] }
+        }
+        set {
+            guard newValue.count == matrix_rows else { fatalError("Columns oversized \(newValue.count) != \(matrix_columns)") }
+            for row in 1...matrix_rows {
+                data[row - 1][index - 1] = newValue[row - 1]
+            }
+        }
     }
 }
 
@@ -160,35 +189,56 @@ final class NeuralNetwork {
     private let inputLayer: Matrix
     private let ih_weights: Matrix
     
-    private var hiddenLayer: Matrix!
+    private var hiddenLayer: Matrix
     private let ho_weights: Matrix
     
-    private var outputLayer: Matrix!
+    private var outputLayer: Matrix
+    private var learningRate: Float = 0.5
     
     init(layout: LayerLayout) throws {
         self.layout = layout
         
         ih_weights =  Matrix(row: layout.input, column: layout.hidden)
-        try ih_weights.randomize()
+        
+        let fakeWeightIh: [[Float]] = [
+            [0.5, 0.4, 0.6],
+            [0.1, 0.8, 0.2]
+        ]
+        try ih_weights.populate(data: fakeWeightIh)
+//        try ih_weights.randomize()
         
         ho_weights = Matrix(row: layout.hidden, column: layout.output)
-        try ho_weights.randomize()
+        
+        let fakeWeightHo: [[Float]] = [
+            [0.7, 0.2],
+            [0.1, 0.6],
+            [0.9, 0.1]
+        ]
+        try ho_weights.populate(data: fakeWeightHo)
+        
+//        try ho_weights.randomize()
         
         inputLayer = Matrix(row: 1, column: layout.input)
+        hiddenLayer = Matrix(row: 1, column: layout.hidden)
+        outputLayer = Matrix(row: 1, column: layout.output)
     }
     
     func sigmoid(_ value: Float) -> Float {
         return 1 / (1 + exp(-value))
     }
     
+    func primeSigmoid(sigmoidValue: Float) -> Float {
+        return sigmoidValue * (1 - sigmoidValue)
+    }
+    
     func predict(inputs: [Float]) throws -> Matrix {
         guard layout.input == inputs.count else { throw "Input doesnt match layout input layer, Should be \(layout.input)" }
         try inputLayer.populate(data: [inputs])
         
-        hiddenLayer = try inputLayer.multiply(m2: ih_weights)
+        try hiddenLayer.populate(data: try inputLayer.multiply(m2: ih_weights).data)
         hiddenLayer.applyToData(f: sigmoid)
         
-        outputLayer = try hiddenLayer.multiply(m2: ho_weights)
+        try outputLayer.populate(data: try hiddenLayer.multiply(m2: ho_weights).data)
         outputLayer.applyToData(f: sigmoid)
         
         return outputLayer
@@ -198,16 +248,59 @@ final class NeuralNetwork {
         for data in trainingData {
             try validateTrainingData(data)
             let output = try predict(inputs: data.input)
-            let cost = calculateCost(output: output, expectedOutput: data.expectedOutput)
-            print(cost)
+
+            let costs = calculateIndividualCosts(output: output, expectedOutput: data.expectedOutput)
+            let totalCost = calculateTotalCost(output: output, expectedOutput: data.expectedOutput)
+            
+            let derived = calculateDerivedIndividualCosts(output: output, expectedOutput: data.expectedOutput)
+            let deltas = weightDeltas(output: output ,derivedCost: derived)
+            
+            print("those are the deltas: ")
+            deltas.matrixPrint()
             
         }
     }
     
-    func calculateCost(output: Matrix, expectedOutput: Matrix) -> Float {
-        let difference = try! Matrix.subtract(output, expectedOutput)
-        difference.applyToData { powf($0, 2) }
-        return difference.data.reduce(0) { total, row in total + row.reduce(0, +) }
+    func weightDeltas(output: Matrix, derivedCost: Matrix) -> Matrix {
+        // derivative of total cost with respect to each weigth
+        // a = derived cost
+        // b = derivative of sigmoid function
+        // c = output after sigmoid previous perceptro (hidden or input)
+        // DELTA ERROR -> WEIGHT = a * b * c
+        
+        //A
+        let c = derivedCost.copy()
+        
+        // B
+        let b = outputLayer.copy()
+        b.applyToData(f: primeSigmoid)
+        
+        let a = hiddenLayer.copy()
+        
+        
+        print("starting")
+        let _one = try! a.multiply(m2: b)
+        print("_one")
+        let _two = try! _one.multiply(m2: c)
+        print("_two")
+        return _two
+    }
+    
+    func calculateIndividualCosts(output: Matrix, expectedOutput: Matrix) -> Matrix {
+        let errors = try! Matrix.subtract(expectedOutput, output)
+        errors.applyToData { powf($0, 2) }
+        return errors
+    }
+    
+    func calculateDerivedIndividualCosts(output: Matrix, expectedOutput: Matrix) -> Matrix {
+        let errors = try! Matrix.subtract(expectedOutput, output)
+        errors.applyToData { $0 * 2 }
+        return errors
+    }
+    
+    func calculateTotalCost(output: Matrix, expectedOutput: Matrix) -> Float {
+        let costs = calculateIndividualCosts(output: output, expectedOutput: expectedOutput)
+        return costs.data.reduce(0) { total, row in total + row.reduce(0, +) }
     }
 
     func printNetwork() {
@@ -219,14 +312,18 @@ final class NeuralNetwork {
     }
     
     private func validateTrainingData(_ data: TrainingData) throws {
-        guard Matrix.sameDimension(outputLayer, data.expectedOutput) else {
-            throw "Invalid training data expected output dimensions \(outputLayer.matrix_rows)x\(outputLayer.matrix_columns), but got \(data.expectedOutput.matrix_rows)x\(data.expectedOutput.matrix_columns)"
-        }
+        try Matrix.sameDimension(outputLayer, data.expectedOutput)
         guard data.input.count == layout.input else { throw "Invalid Input, neural network expects input size to be \(layout.input), but got \(data.input.count)" }
     }
 }
 
-let neuralNetwork = try NeuralNetwork(layout: NeuralNetwork.LayerLayout(input: 2, hidden: 3, output: 2))
-
-let output = try neuralNetwork.predict(inputs: [3,4])
-neuralNetwork.printNetwork()
+//let neuralNetwork = try NeuralNetwork(layout: NeuralNetwork.LayerLayout(input: 2, hidden: 3, output: 2))
+//
+//
+//
+//
+////let output = try neuralNetwork.predict(inputs: [4,5])
+//let expected = try Matrix(data: [[0, 1]] )
+//
+//try neuralNetwork.train([.init(input: [4, 5], expectedOutput: expected)])
+//neuralNetwork.printNetwork()
