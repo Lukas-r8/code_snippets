@@ -31,7 +31,7 @@ final class Matrix {
         populated = true
     }
     
-    func randomize(range: ClosedRange<Float> = 2...2) throws {
+    func randomize(range: ClosedRange<Float> = -2...2) throws {
         let randomized = (0..<matrix_rows).map { _ in (0..<matrix_columns).map { _ in Float.random(in: range) } }
         try populate(data: randomized)
     }
@@ -242,6 +242,7 @@ final class NeuralNetwork {
     func predict(inputs: [Float]) throws -> Matrix {
         guard layout.input == inputs.count else { throw "Input doesnt match layout input layer, Should be \(layout.input)" }
         try inputLayer.populate(data: [inputs])
+        inputLayer.applyToData(f: sigmoid)
         
         try hiddenLayer.populate(data: try inputLayer.multiply(m2: ih_weights).data)
         hiddenLayer.applyToData(f: sigmoid)
@@ -268,7 +269,7 @@ final class NeuralNetwork {
             let ih_delta_weights = try deltaWeights(for: ih_weights, error: hiddenErrors, layer: hiddenLayer, previousLayer: inputLayer)
             try ih_weights.add(m2: ih_delta_weights)
             
-            if c == 990 || c == 1 {
+            if c == trainingData.count - 1 || c == 0 {
                 let totalCost = calculateTotalCost(output: output, expectedOutput: data.expectedOutput)
                 print("Total Cost: \(totalCost)")
             }
@@ -307,13 +308,13 @@ private extension NeuralNetwork {
     
     /// Returns the error for the previous layer based on previous weights
     func backpropagateError(for weights: Matrix, currentErrors: Matrix) -> Matrix {
-//        let proportion = Matrix(row: weights.matrix_rows, column: weights.matrix_columns)
-//        
-//        for index in 1...weights.matrix_columns {
-//            let column = weights[column: index]
-//            let sum = column.reduce(0, +)
-//            proportion[column: index] = column.map { $0 / sum }
-//        }
+        let proportion = Matrix(row: weights.matrix_rows, column: weights.matrix_columns)
+
+        for index in 1...weights.matrix_columns {
+            let column = weights[column: index]
+            let sum = column.reduce(0, +)
+            proportion[column: index] = column.map { $0 / sum }
+        }
         
         return try! weights.multiply(m2: currentErrors.transposed()).transposed()
     }
@@ -346,25 +347,38 @@ let expectedTrue = try Matrix(data: [[1, 0]] )
 
 var trainingData: [NeuralNetwork.TrainingData] = []
 
-for _ in 0...1000 {
-    let a = Float.random(in: -100...100)
-    let b = Float.random(in: -100...100)
-    
-    let expected = a > b ? expectedTrue.copy() : expectedFalse.copy()
-    
-    let data = NeuralNetwork.TrainingData(input: [a, b], expectedOutput: expected)
-    trainingData.append(data)
+let smallRange = 0...100
+let greaterRange = 200...300
+
+for i in 0...5000 {
+    if i % 2 == 0 {
+        let a = Int.random(in: smallRange)
+        let b = Int.random(in: greaterRange)
+        let expected = a > b ? expectedTrue.copy() : expectedFalse.copy()
+        
+        let data = NeuralNetwork.TrainingData(input: [Float(a), Float(b)], expectedOutput: expected)
+        trainingData.append(data)
+    } else {
+        let b = Int.random(in: smallRange)
+        let a = Int.random(in: greaterRange)
+        let expected = a > b ? expectedTrue.copy() : expectedFalse.copy()
+        
+        let data = NeuralNetwork.TrainingData(input: [Float(a), Float(b)], expectedOutput: expected)
+        trainingData.append(data)
+    }
 }
+
+trainingData.shuffle()
 
 
 try neuralNetwork.train(trainingData)
 
 
-let input1: [Float] = [17, 50] // false
-let input2: [Float] = [80, 37] // true
-let input3: [Float] = [34, 51] // false
-let input4: [Float] = [-10, -20] // true
-let input5: [Float] = [9, 1] // true
+let input1: [Float] = [50, 205] // false
+let input2: [Float] = [30, 220] // false
+let input3: [Float] = [240, 10] // true
+let input4: [Float] = [250, 80] // true
+let input5: [Float] = [70, 270] // true
 
 
 let allInputs = [input1, input2, input3, input4, input5]
